@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">MapBoxDemo</string>
+    <string name="mapbox_access_token">"${MAP_BOX_ACCESS_TOKEN}"</string>
+    <!--今のところアクセストークンはまだいらないみたい。-->
+</resources>
