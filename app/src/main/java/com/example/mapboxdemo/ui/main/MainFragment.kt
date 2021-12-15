@@ -32,21 +32,26 @@ class MainFragment : Fragment() {
     private lateinit var viewModel: MainViewModel
     private lateinit var mapView: MapView
     private lateinit var locationPermissionHelper: LocationPermissionHelper
-    private val onIndicatorBearingChangedListener = OnIndicatorBearingChangedListener {
-        mapView.getMapboxMap().setCamera(CameraOptions.Builder().bearing(it).build())
+
+    private val onIndicatorBearingChangedListener = OnIndicatorBearingChangedListener {//向いている方角が変わった時のリスナー
+        mapView.getMapboxMap().setCamera(CameraOptions.Builder().bearing(it).build())//詳細は後で確認
     }
-    private val onIndicatorPositionChangedListener = OnIndicatorPositionChangedListener {
+
+    private val onIndicatorPositionChangedListener = OnIndicatorPositionChangedListener {//場所が変わった時のリスナ０
         mapView.getMapboxMap().setCamera(CameraOptions.Builder().center(it).build())
-        mapView.gestures.focalPoint = mapView.getMapboxMap().pixelForCoordinate(it)
+        mapView.gestures.focalPoint = mapView.getMapboxMap().pixelForCoordinate(it)//詳細は後で確認
     }
+
     private val onMoveListener = object : OnMoveListener {
-        override fun onMoveBegin(detector: MoveGestureDetector) {
+        override fun onMoveBegin(detector: MoveGestureDetector) {//動きはじめ
             onCameraTrackingDismissed()
         }
-        override fun onMove(detector: MoveGestureDetector): Boolean {
+        override fun onMove(detector: MoveGestureDetector): Boolean {//動いてる途中
             return false
         }
-        override fun onMoveEnd(detector: MoveGestureDetector) {}
+        override fun onMoveEnd(detector: MoveGestureDetector) {//動き終わり
+
+        }
     }
 
 
@@ -67,8 +72,8 @@ class MainFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))
-        locationPermissionHelper.checkPermissions { onMapReady() }
+        locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))//Permission周りを手伝ってくれるオブジェクト
+        locationPermissionHelper.checkPermissions { onMapReady() } //Permissionを確認して、コールバックを起動してくれるみたい。
 
 
         /*mapView.getMapboxMap()
@@ -114,17 +119,20 @@ class MainFragment : Fragment() {
     }
 
     private fun onMapReady() {
-        mapView.getMapboxMap().setCamera(
-            CameraOptions.Builder()
-                .zoom(14.0)
-                .build()
-        )
-        mapView.getMapboxMap().loadStyleUri(
-            Style.MAPBOX_STREETS
-        ) {
-            initLocationComponent()
-            setupGesturesListener()
+        mapView.getMapboxMap().let {
+            it.setCamera(
+                CameraOptions.Builder()//カメラでどのようにとるか//地図を画面でどのように切り取るかを設定できる。
+                    .zoom(14.0)
+                    .build()
+            )
+            it.loadStyleUri(
+                Style.MAPBOX_STREETS//マップのスタイルをUriからダウンロード（例）航空写真とか
+            ) {//ロード後に呼び出されるコールバック
+                initLocationComponent()
+                setupGesturesListener()//ジェスチャー（指の動きを受けた時の操作を定義）
+            }
         }
+
     }
 
     private fun setupGesturesListener() {
@@ -132,10 +140,11 @@ class MainFragment : Fragment() {
     }
 
     private fun initLocationComponent() {
+
         val locationComponentPlugin = mapView.location
         locationComponentPlugin.updateSettings {
-            this.enabled = true
-            this.locationPuck = LocationPuck2D(
+            this.enabled = true //ユーザーの現在地を表示
+            this.locationPuck = LocationPuck2D(//現在地アイコン
                 bearingImage = AppCompatResources.getDrawable(
                     requireContext(),
                     R.drawable.mapbox_user_puck_icon,
@@ -144,7 +153,7 @@ class MainFragment : Fragment() {
                     requireContext(),
                     R.drawable.mapbox_user_icon_shadow,
                 ),
-                scaleExpression = interpolate {
+                scaleExpression = interpolate {//ここでなにしているの不明。いずれ確認する。
                     linear()
                     zoom()
                     stop {
@@ -158,8 +167,8 @@ class MainFragment : Fragment() {
                 }.toJson()
             )
         }
-        locationComponentPlugin.addOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)
-        locationComponentPlugin.addOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)
+        locationComponentPlugin.addOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)//場所が変わった時のリスナー
+        locationComponentPlugin.addOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)//自分が向いている方角が変更した時のリスナー
     }
 
 
