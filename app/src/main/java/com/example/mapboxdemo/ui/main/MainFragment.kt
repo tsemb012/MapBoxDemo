@@ -10,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.graphics.scale
 import com.example.mapboxdemo.R
 import com.example.mapboxdemo.utils.LocationPermissionHelper
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -83,32 +84,35 @@ class MainFragment : Fragment() {
             ContextからMapViewを生成する方法
             mapView = MapView(requireContext())*/
 
+        mapView.getMapboxMap()
+            .loadStyleUri(Style.MAPBOX_STREETS
+            ) {
+                bitmap = AppCompatResources.getDrawable(requireContext(), R.drawable.common_google_signin_btn_icon_dark)?.toBitmap()?.scale(100,100,true) ?: throw IllegalStateException()
+                val annotationApi = mapView.annotations
+                val pointAnnotationManager = annotationApi.createPointAnnotationManager(mapView)
+                val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
+                    .withPoint(Point.fromLngLat(139.7222018, 35.6517392 ))
+                    .withIconImage(bitmap)// Make the annotation draggable.
+                    .withDraggable(true)
+                pointAnnotationManager.create(pointAnnotationOptions)
+            }
+
+
+
         return mapView
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        bitmap = AppCompatResources.getDrawable(requireContext(), R.drawable.common_google_signin_btn_icon_dark)?.toBitmap() ?: throw IllegalStateException()
 
-        val annotationApi = mapView.annotations
-        val pointAnnotationManager = annotationApi.createPointAnnotationManager(mapView)
-        val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
-            .withPoint(Point.fromLngLat(139.7222018, 35.6517392 ))
-            .withIconImage(bitmap)// Make the annotation draggable.
-            .withDraggable(true)
-        pointAnnotationManager.create(pointAnnotationOptions)
+
 
         locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))//Permission周りを手伝ってくれるオブジェクト
         locationPermissionHelper.checkPermissions { onMapReady() } //Permissionを確認して、コールバックを起動してくれるみたい。
 
 
-        /*mapView.getMapboxMap()
-            .loadStyleUri(Style.MAPBOX_STREETS
-            ) { mapView.location.updateSettings{
-                enabled = true
-                pulsingEnabled = true
-            } }*/
+
 
     }
 
