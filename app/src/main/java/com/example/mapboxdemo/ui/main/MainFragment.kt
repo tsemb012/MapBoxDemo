@@ -1,5 +1,6 @@
 package com.example.mapboxdemo.ui.main
 
+import android.graphics.Bitmap
 import androidx.lifecycle.ViewModelProvider
 import android.os.Bundle
 import androidx.fragment.app.Fragment
@@ -8,20 +9,27 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.core.graphics.drawable.toBitmap
 import com.example.mapboxdemo.R
 import com.example.mapboxdemo.utils.LocationPermissionHelper
 import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.extension.style.expressions.dsl.generated.interpolate
 import com.mapbox.maps.plugin.LocationPuck2D
+import com.mapbox.maps.plugin.annotation.annotations
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.gestures.OnMoveListener
 import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
 import com.mapbox.maps.plugin.locationcomponent.location
+import java.lang.IllegalStateException
 import java.lang.ref.WeakReference
+import kotlin.concurrent.thread
 
 class MainFragment : Fragment() {
 
@@ -30,8 +38,14 @@ class MainFragment : Fragment() {
     }
 
     private lateinit var viewModel: MainViewModel
-    private lateinit var mapView: MapView
+    private val mapView: MapView by lazy { MapView(requireContext()) }
     private lateinit var locationPermissionHelper: LocationPermissionHelper
+    private lateinit var bitmap: Bitmap
+    // Create an instance of the Annotation API and get the PointAnnotationManager.
+
+
+
+// Add the draggable pointAnnotation to the map.
 
     private val onIndicatorBearingChangedListener = OnIndicatorBearingChangedListener {//向いている方角が変わった時のリスナー
         mapView.getMapboxMap().setCamera(CameraOptions.Builder().bearing(it).build())//詳細は後で確認
@@ -59,18 +73,31 @@ class MainFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
+
         /*TODO　レイアウトからMapViewを生成する方法
             val view = inflater.inflate(R.layout.main_fragment, container, false)
             mapView = view.findViewById(R.id.mapView) as MapView
             return inflater.inflate(R.layout.main_fragment, container, false)*/
 
-        //ContextからMapViewを生成する方法
-        mapView = MapView(requireContext())
+        /*TODO
+            ContextからMapViewを生成する方法
+            mapView = MapView(requireContext())*/
+
         return mapView
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
+        bitmap = AppCompatResources.getDrawable(requireContext(), R.drawable.common_google_signin_btn_icon_dark)?.toBitmap() ?: throw IllegalStateException()
+
+        val annotationApi = mapView.annotations
+        val pointAnnotationManager = annotationApi.createPointAnnotationManager(mapView)
+        val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
+            .withPoint(Point.fromLngLat(139.7222018, 35.6517392 ))
+            .withIconImage(bitmap)// Make the annotation draggable.
+            .withDraggable(true)
+        pointAnnotationManager.create(pointAnnotationOptions)
 
         locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))//Permission周りを手伝ってくれるオブジェクト
         locationPermissionHelper.checkPermissions { onMapReady() } //Permissionを確認して、コールバックを起動してくれるみたい。
