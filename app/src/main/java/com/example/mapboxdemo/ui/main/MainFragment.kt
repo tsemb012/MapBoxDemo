@@ -10,7 +10,6 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.graphics.drawable.toBitmap
-import androidx.core.graphics.scale
 import com.example.mapboxdemo.R
 import com.example.mapboxdemo.utils.LocationPermissionHelper
 import com.mapbox.android.gestures.MoveGestureDetector
@@ -30,7 +29,6 @@ import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListen
 import com.mapbox.maps.plugin.locationcomponent.location
 import java.lang.IllegalStateException
 import java.lang.ref.WeakReference
-import kotlin.concurrent.thread
 
 class MainFragment : Fragment() {
 
@@ -42,78 +40,24 @@ class MainFragment : Fragment() {
     private val mapView: MapView by lazy { MapView(requireContext()) }
     private lateinit var locationPermissionHelper: LocationPermissionHelper
     private lateinit var bitmap: Bitmap
-    // Create an instance of the Annotation API and get the PointAnnotationManager.
-
-
-
-// Add the draggable pointAnnotation to the map.
-
     private val onIndicatorBearingChangedListener = OnIndicatorBearingChangedListener {//向いている方角が変わった時のリスナー
         mapView.getMapboxMap().setCamera(CameraOptions.Builder().bearing(it).build())//詳細は後で確認
     }
-
     private val onIndicatorPositionChangedListener = OnIndicatorPositionChangedListener {//場所が変わった時のリスナ０
         mapView.getMapboxMap().setCamera(CameraOptions.Builder().center(it).build())
         mapView.gestures.focalPoint = mapView.getMapboxMap().pixelForCoordinate(it)//詳細は後で確認
     }
-
     private val onMoveListener = object : OnMoveListener {
-        override fun onMoveBegin(detector: MoveGestureDetector) {//動きはじめ
-            onCameraTrackingDismissed()
-        }
-        override fun onMove(detector: MoveGestureDetector): Boolean {//動いてる途中
-            return false
-        }
-        override fun onMoveEnd(detector: MoveGestureDetector) {//動き終わり
-
-        }
+        override fun onMoveBegin(detector: MoveGestureDetector) { onCameraTrackingDismissed() }
+        override fun onMove(detector: MoveGestureDetector): Boolean { return false }
+        override fun onMoveEnd(detector: MoveGestureDetector) { }
     }
 
-
-    override fun onCreateView(
-        inflater: LayoutInflater, container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View {
-
-        /*TODO　レイアウトからMapViewを生成する方法
-            val view = inflater.inflate(R.layout.main_fragment, container, false)
-            mapView = view.findViewById(R.id.mapView) as MapView
-            return inflater.inflate(R.layout.main_fragment, container, false)*/
-
-        /*TODO
-            ContextからMapViewを生成する方法
-            mapView = MapView(requireContext())*/
-
-        mapView.getMapboxMap()
-            .loadStyleUri(Style.MAPBOX_STREETS
-            ) {
-                bitmap = AppCompatResources.getDrawable(requireContext(), R.drawable.common_google_signin_btn_icon_dark)?.toBitmap()?.scale(100,100,true) ?: throw IllegalStateException()
-                val annotationApi = mapView.annotations
-                val pointAnnotationManager = annotationApi.createPointAnnotationManager(mapView)
-                val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(139.7222018, 35.6517392 ))
-                    .withIconImage(bitmap)// Make the annotation draggable.
-                    .withDraggable(true)
-                pointAnnotationManager.create(pointAnnotationOptions)
-            }
-
-
-
-        return mapView
-    }
-
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?) = mapView
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
-
-
-
-        locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))//Permission周りを手伝ってくれるオブジェクト
-        locationPermissionHelper.checkPermissions { onMapReady() } //Permissionを確認して、コールバックを起動してくれるみたい。
-
-
-
-
+        locationPermissionHelper = LocationPermissionHelper(WeakReference(requireActivity()))//Permissionの確認を行うヘルパー。
+        locationPermissionHelper.checkPermissions { onMapReady() } //Permissionを確認して、コールバックを起動。
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
@@ -121,7 +65,83 @@ class MainFragment : Fragment() {
         viewModel = ViewModelProvider(this).get(MainViewModel::class.java)
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        mapView.location.removeOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)
+        mapView.location.removeOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)
+        mapView.gestures.removeOnMoveListener(onMoveListener)
+    }
 
+    private fun onMapReady() {//Permission完了後の処理をまとめる。
+        mapView.getMapboxMap().let {
+            it.setCamera(CameraOptions.Builder().zoom(14.0).build())//カメラでどのようにとるか//地図を画面でどのように切り取るかを設定できる。
+            it.loadStyleUri(Style.MAPBOX_STREETS) { setMapComponents() }//Map上に配置するアイテムをセット
+        }
+    }
+
+    private fun setMapComponents() {
+        addAnnotationToMap()
+        initLocationComponent()
+        setupGesturesListener()//ジェスチャー（指の動きを受けた時の操作を定義）
+    }
+
+    private fun setupGesturesListener() { mapView.gestures.addOnMoveListener(onMoveListener) }
+
+    private fun initLocationComponent() {
+
+        val locationComponentPlugin = mapView.location
+        locationComponentPlugin.updateSettings {
+            this.enabled = true //ユーザーの現在地を表示
+            this.locationPuck = LocationPuck2D(//現在地アイコン
+                bearingImage = AppCompatResources.getDrawable(requireContext(), R.drawable.mapbox_user_puck_icon),
+                shadowImage = AppCompatResources.getDrawable(requireContext(), R.drawable.mapbox_user_icon_shadow),
+                scaleExpression = interpolate {
+                    linear()
+                    zoom()
+                    stop {
+                        literal(0.0)
+                        literal(0.6)
+                    }
+                    stop {
+                        literal(20.0)
+                        literal(1.0)
+                    }
+                }.toJson()
+            )
+        }
+        //それぞれトラッキングの役割をもつ。
+        locationComponentPlugin.addOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)//場所が変わった時のリスナー
+        locationComponentPlugin.addOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)//自分が向いている方角が変更した時のリスナー
+    }
+
+
+    private fun onCameraTrackingDismissed() {
+        Toast.makeText(requireContext(), "onCameraTrackingDismissed", Toast.LENGTH_SHORT).show()
+        mapView.location.removeOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)
+        mapView.location.removeOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)
+        mapView.gestures.removeOnMoveListener(onMoveListener)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        locationPermissionHelper.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    }
+
+    private fun addAnnotationToMap() {
+        //BitMapに変換
+        bitmap = AppCompatResources.getDrawable(requireContext(), R.drawable.ic_launcher_foreground)?.toBitmap() ?: throw IllegalStateException()
+        val annotationApi = mapView.annotations
+        val pointAnnotationManager = annotationApi.createPointAnnotationManager(mapView)
+        val pointAnnotationOptions: PointAnnotationOptions = PointAnnotationOptions()
+            .withPoint(Point.fromLngLat(139.7222018, 35.6517392 ))
+            .withIconImage(bitmap)// Make the annotation draggable.
+            .withDraggable(true)//アイコンをドラッグできる。
+        pointAnnotationManager.create(pointAnnotationOptions)
+    }
 
 /*
     override fun onStart() {
@@ -140,86 +160,15 @@ class MainFragment : Fragment() {
     }
 */
 
-    override fun onDestroy() {
-        super.onDestroy()
-        mapView.location
-            .removeOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)
-        mapView.location
-            .removeOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)
-        mapView.gestures.removeOnMoveListener(onMoveListener)
-    }
-
-    private fun onMapReady() {
-        mapView.getMapboxMap().let {
-            it.setCamera(
-                CameraOptions.Builder()//カメラでどのようにとるか//地図を画面でどのように切り取るかを設定できる。
-                    .zoom(14.0)
-                    .build()
-            )
-            it.loadStyleUri(
-                Style.MAPBOX_STREETS//マップのスタイルをUriからダウンロード（例）航空写真とか
-            ) {//ロード後に呼び出されるコールバック
-                initLocationComponent()
-                setupGesturesListener()//ジェスチャー（指の動きを受けた時の操作を定義）
-            }
-        }
-
-    }
-
-    private fun setupGesturesListener() {
-        mapView.gestures.addOnMoveListener(onMoveListener)
-    }
-
-    private fun initLocationComponent() {
-
-        val locationComponentPlugin = mapView.location
-        locationComponentPlugin.updateSettings {
-            this.enabled = true //ユーザーの現在地を表示
-            this.locationPuck = LocationPuck2D(//現在地アイコン
-                bearingImage = AppCompatResources.getDrawable(
-                    requireContext(),
-                    R.drawable.mapbox_user_puck_icon,
-                ),
-                shadowImage = AppCompatResources.getDrawable(
-                    requireContext(),
-                    R.drawable.mapbox_user_icon_shadow,
-                ),
-                scaleExpression = interpolate {//ここでなにしているの不明。いずれ確認する。
-                    linear()
-                    zoom()
-                    stop {
-                        literal(0.0)
-                        literal(0.6)
-                    }
-                    stop {
-                        literal(20.0)
-                        literal(1.0)
-                    }
-                }.toJson()
-            )
-        }
-        locationComponentPlugin.addOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)//場所が変わった時のリスナー
-        locationComponentPlugin.addOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)//自分が向いている方角が変更した時のリスナー
-    }
-
-
-    private fun onCameraTrackingDismissed() {
-        Toast.makeText(requireContext(), "onCameraTrackingDismissed", Toast.LENGTH_SHORT).show()
-        mapView.location
-            .removeOnIndicatorPositionChangedListener(onIndicatorPositionChangedListener)
-        mapView.location
-            .removeOnIndicatorBearingChangedListener(onIndicatorBearingChangedListener)
-        mapView.gestures.removeOnMoveListener(onMoveListener)
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        locationPermissionHelper.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    }
-
 
 }
+
+
+/*TODO　レイアウトからMapViewを生成する方法
+    val view = inflater.inflate(R.layout.main_fragment, container, false)
+    mapView = view.findViewById(R.id.mapView) as MapView
+    return inflater.inflate(R.layout.main_fragment, container, false)*/
+
+/*TODO
+    ContextからMapViewを生成する方法
+    mapView = MapView(requireContext())*/
